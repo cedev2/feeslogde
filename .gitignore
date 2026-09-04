@@ -1,0 +1,10 @@
+node_modules/
+.env
+uploads/
+cookies.txt
+*.zip
+deploy/
+_sess_dump.php
+_sess_get.php
+_sess_set.php
+.htaccess
