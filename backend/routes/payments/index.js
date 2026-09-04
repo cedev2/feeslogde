@@ -58,6 +58,10 @@ router.get('/list', requireAuth, async (req, res) => {
 
     const formatted = payments.map(p => ({
       ...p,
+      studentId: p.studentId && p.studentId._id ? p.studentId._id.toString() : p.studentId,
+      classId: p.classId && p.classId._id ? p.classId._id.toString() : p.classId,
+      termId: p.termId && p.termId._id ? p.termId._id.toString() : p.termId,
+      recordedBy: p.recordedBy && p.recordedBy._id ? p.recordedBy._id.toString() : p.recordedBy,
       student_name: p.studentId && p.studentId.name ? p.studentId.name : '',
       student_id_text: p.studentId && p.studentId.studentId ? p.studentId.studentId : '',
       class_name: p.classId && p.classId.name ? p.classId.name : '',
@@ -158,6 +162,41 @@ router.post('/create', requireAuth, async (req, res) => {
     });
   } catch (error) {
     return fail(res, 'Payment recording failed', 500, { error: error.message });
+  }
+});
+
+// POST /api/payments/delete
+router.post('/delete', requireAuth, async (req, res) => {
+  try {
+    if (!canPerform(req.user, 'manage_payments')) {
+      return fail(res, 'Permission denied', 403);
+    }
+
+    const schoolId = getSchoolId(req.user, req);
+    if (!schoolId) return fail(res, 'School ID required', 403);
+
+    const { id } = getInput(req);
+    if (!id) return fail(res, 'Payment ID required');
+
+    const payment = await Payment.findOne({ _id: id, schoolId });
+    if (!payment) return fail(res, 'Payment not found', 404);
+
+    await Payment.findByIdAndDelete(id);
+
+    await logActivity({
+      action: 'payment_deleted',
+      description: `Payment ${payment.receiptNumber || ''} deleted (${payment.amount} FRW)`,
+      schoolId,
+      userId: req.user._id,
+      userEmail: req.user.email,
+      entityType: 'payment',
+      entityId: 0,
+      ipAddress: req.ip
+    });
+
+    return success(res, { message: 'Payment deleted' });
+  } catch (error) {
+    return fail(res, 'Failed to delete payment', 500, { error: error.message });
   }
 });
 

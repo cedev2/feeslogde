@@ -8,7 +8,7 @@ const API_BASE = window.FEESLEDGER_API_URL ? window.FEESLEDGER_API_URL + '/api' 
 async function api(endpoint, options = {}) {
     const url = endpoint.startsWith('http') ? endpoint : API_BASE + endpoint;
     const response = await fetch(url, {
-        credentials: 'same-origin',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...options.headers },
         ...options,
     });
@@ -58,7 +58,7 @@ async function apiUpload(endpoint, formData) {
     const url = endpoint.startsWith('http') ? endpoint : API_BASE + endpoint;
     const response = await fetch(url, {
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
         body: formData,
     });
     const text = await response.text();

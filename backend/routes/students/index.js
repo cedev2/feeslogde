@@ -8,6 +8,23 @@ const Class = require('../../models/Class');
 const AcademicYear = require('../../models/AcademicYear');
 const Payment = require('../../models/Payment');
 const Trash = require('../../models/Trash');
+
+async function generateStudentId(schoolId, academicYearId) {
+  const existing = await Student.find({ schoolId, academicYearId })
+    .select('studentId')
+    .lean();
+  let maxNum = 0;
+  for (const s of existing) {
+    const match = (s.studentId || '').match(/(\d+)$/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (n > maxNum) maxNum = n;
+    }
+  }
+  const year = await AcademicYear.findById(academicYearId).select('name').lean();
+  const prefix = year ? (year.name.split(/[–-]/)[0] || new Date().getFullYear()) : new Date().getFullYear();
+  return `STU-${prefix}-${String(maxNum + 1).padStart(4, '0')}`;
+}
 const { success, fail, getInput } = require('../../helpers/response');
 const { validateId, validateEmail } = require('../../helpers/validation');
 const { logActivity } = require('../../helpers/audit');
@@ -156,7 +173,6 @@ router.post('/create', requireAuth, async (req, res) => {
 
     const errors = {};
     if (!name) errors.name = 'Student name is required';
-    if (!studentId) errors.student_id = 'Student ID is required';
     if (!classId) errors.class_id = 'Class is required';
     if (parentEmail && !validateEmail(parentEmail)) errors.parent_email = 'Valid parent email is required';
     if (Object.keys(errors).length > 0) {
@@ -198,12 +214,14 @@ router.post('/create', requireAuth, async (req, res) => {
       parentId = newParent._id;
     }
 
+    const finalStudentId = studentId || await generateStudentId(schoolId, yearId);
+
     if (id) {
       const existing = await Student.findOne({ _id: id, schoolId });
       if (!existing) return fail(res, 'Student not found', 404);
 
       existing.name = name;
-      existing.studentId = studentId;
+      existing.studentId = finalStudentId;
       existing.gender = gender;
       existing.classId = classId;
       existing.parentId = parentId;
@@ -220,13 +238,13 @@ router.post('/create', requireAuth, async (req, res) => {
         entityType: 'student',
         entityId: 0,
         studentName: name,
-        studentId,
+        studentId: finalStudentId,
         ipAddress: req.ip
       });
 
-      return success(res, { id: existing._id, name, student_id: studentId, class_id: classId, parent_id: parentId });
+      return success(res, { id: existing._id, name, student_id: finalStudentId, class_id: classId, parent_id: parentId });
     } else {
-      const duplicate = await Student.findOne({ schoolId, academicYearId: yearId, studentId });
+      const duplicate = await Student.findOne({ schoolId, academicYearId: yearId, studentId: finalStudentId });
       if (duplicate) {
         return fail(res, 'A student with this ID already exists in this academic year', 409);
       }
@@ -236,7 +254,7 @@ router.post('/create', requireAuth, async (req, res) => {
         academicYearId: yearId,
         classId,
         parentId,
-        studentId,
+        studentId: finalStudentId,
         name,
         gender,
         photo,
@@ -253,11 +271,11 @@ router.post('/create', requireAuth, async (req, res) => {
         entityType: 'student',
         entityId: 0,
         studentName: name,
-        studentId,
+        studentId: finalStudentId,
         ipAddress: req.ip
       });
 
-      return success(res, { id: newStudent._id, name, student_id: studentId, class_id: classId, parent_id: parentId });
+      return success(res, { id: newStudent._id, name, student_id: finalStudentId, class_id: classId, parent_id: parentId });
     }
   } catch (error) {
     return fail(res, 'Failed to save student', 500, { error: error.message });
@@ -358,9 +376,7 @@ router.post('/import', requireAuth, async (req, res) => {
         continue;
       }
 
-      const count = await Student.countDocuments({ schoolId, classId, academicYearId: yearId });
-      const num = count + 1;
-      const genId = `${cls.name}-${String(num).padStart(3, '0')}`;
+      const genId = await generateStudentId(schoolId, yearId);
 
       await Student.create({
         schoolId,

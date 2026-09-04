@@ -790,10 +790,6 @@ async function deleteStudent(id) {
 async function saveStudentApi(id) {
   let name = document.getElementById("sname").value.trim(), sid = document.getElementById("sid").value.trim(), classId = document.getElementById("sclass").value, parentName = document.getElementById("pname").value.trim(), parentEmail = document.getElementById("pemail").value.trim(), parentPhone = document.getElementById("pphone").value.trim(), gender = document.getElementById("gender").value;
   if (!name || !classId) return toast("Student name and class are required.");
-  if (!sid) {
-    let seq = (db.students || []).filter(x => x.year === year || !x.year).length + 1;
-    sid = "STU-" + (year.split("–")[0] || year) + "-" + String(seq).padStart(4, "0");
-  }
   if (parentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) return toast("Please enter a valid parent email.");
   try {
     let body = { name, student_id: sid, class_id: classId, parent_name: parentName, parent_email: parentEmail, parent_phone: parentPhone, gender };
@@ -826,7 +822,7 @@ async function setPaid(id) {
   if (need <= 0) return toast("Already fully paid.");
   if (!confirm("Mark as fully paid?")) return;
   try {
-    await apiPost('/payments/create', { student_id: id, amount: need, method: "cash", term });
+    await apiPost('/payments/create', { student_id: id, amount: need, method: "cash", term: "All Terms" });
     await loadAllData(); render(); toast("Student marked Fully Paid");
   } catch (e) { toast(e.message); }
 }
@@ -840,17 +836,20 @@ async function confirmPartialApi(id) {
   let amount = Number(document.getElementById("payAmount").value);
   if (amount <= 0) return toast("Enter a valid amount.");
   try {
-    await apiPost('/payments/create', { student_id: id, amount, method: "cash", term });
+    await apiPost('/payments/create', { student_id: id, amount, method: "cash", term: "All Terms" });
     await loadAllData(); closeModal(); render(); toast("Payment recorded.");
   } catch (e) { toast(e.message); }
 }
 
 async function setUnpaid(id) {
   if (!can('payments')) return toast('Only Accountant can record payments.');
-  if (!confirm('Confirm student is unpaid?')) return;
+  let s = db.students.find(x => x.id == id);
+  let ps = (db.payments || []).filter(p => (p.studentId || p.student_id) === id);
+  if (!ps.length) return toast('Student already has no payments (Unpaid).');
+  if (!confirm('This will delete all payments for this student. Confirm?')) return;
   try {
-    await apiPost('/payments/create', { student_id: id, amount: 0, method: 'cash', term });
-    await loadAllData(); render(); toast('Student status updated');
+    for (const p of ps) { await apiDelete('/payments/delete', { id: p.id || p._id }); }
+    await loadAllData(); render(); toast('Student marked Unpaid');
   } catch (e) { toast(e.message); }
 }
 
