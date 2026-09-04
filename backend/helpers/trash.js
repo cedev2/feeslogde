@@ -71,9 +71,17 @@ const destroyEntity = async (trash) => {
     case 'user':
       await User.findByIdAndDelete(trash.entityId);
       break;
-    case 'school':
+    case 'school': {
       await School.findByIdAndDelete(trash.entityId);
+      const adminUser = await User.findOne({ schoolId: trash.entityId, role: 'school_admin' });
+      if (adminUser) {
+        adminUser.schoolId = undefined;
+        adminUser.status = 'inactive';
+        await adminUser.save();
+      }
+      await User.updateMany({ schoolId: trash.entityId }, { status: 'inactive' });
       break;
+    }
     default:
       break;
   }
